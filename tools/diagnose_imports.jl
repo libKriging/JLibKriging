@@ -26,8 +26,8 @@ function imports(dll)
             cur = m.captures[1]; out[cur] = String[]; continue
         end
         if cur !== nothing
-            # member lines: "<vma> <hint> <name>" (hint printed in hex)
-            mm = match(r"^\s+[0-9a-f]+\s+[0-9a-f]+\s+([A-Za-z_@?\$][^\s]*)"i, line)
+            # member lines: "<vma>  <ordinal|<none>>  <hint>  <name>  [bound-to]"
+            mm = match(r"^\s+[0-9a-f]+\s+(?:<none>|\d+)\s+[0-9a-f]+\s+([A-Za-z_@?\$][^\s]*)"i, line)
             mm !== nothing && push!(out[cur], mm.captures[1])
         end
     end
