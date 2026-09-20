@@ -34,22 +34,19 @@ function imports(dll)
     return out
 end
 
-function exports(dll)
-    names = Set{String}()
-    inexp = false
-    for line in eachline(`$objdump -p $dll`)
-        if occursin("[Ordinal/Name Pointer] Table", line)
-            inexp = true; continue
-        end
-        if inexp
-            m = match(r"^\s*\[\s*\d+\]\s+(\S+)\s*$", line)
-            m === nothing ? (isempty(strip(line)) && (inexp = false)) : push!(names, m.captures[1])
-        end
-    end
-    return names
-end
+# every whitespace-separated token of `objdump -p`: an exported name is one of them
+# (robust against the exact layout of the export table)
+exports(dll) = Set{String}(split(read(`$objdump -p $dll`, String)))
 
 findprovider(name) = (i = findfirst(d -> isfile(joinpath(d, name)), dirs); i === nothing ? nothing : joinpath(dirs[i], name))
+
+let wp = joinpath(Sys.BINDIR, "libwinpthread-1.dll")
+    if isfile(wp)
+        ex = exports(wp)
+        println("Julia's libwinpthread-1.dll: clock_gettime64=$(("clock_gettime64" in ex)) ",
+                "nanosleep64=$(("nanosleep64" in ex)) pthread_create=$(("pthread_create" in ex))")
+    end
+end
 
 cache = Dict{String,Set{String}}()
 nbad = 0

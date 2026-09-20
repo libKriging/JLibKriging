@@ -19,6 +19,7 @@
 #   JLIBKRIGING_SYSTEM_BLAS set to 1 to link the system BLAS/LAPACK instead of
 #                           OpenBLAS32_jll (the default on Linux and Windows;
 #                           macOS always uses Accelerate)
+#   JLIBKRIGING_WINLINK     Windows link strategy: static (default) | whole | gcc
 #   CMAKE_GENERATOR         cmake generator (Windows default: "MinGW Makefiles")
 
 using Downloads
@@ -182,8 +183,18 @@ function build_library(work)
         if isempty(get(ENV, "CMAKE_GENERATOR", ""))
             push!(args, "-G", "MinGW Makefiles")
         end
-        push!(args, "-DCMAKE_SHARED_LINKER_FLAGS=-static-libgcc -static-libstdc++",
-                    "-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
+        # libstdc++/winpthread of the (newer) compiler need symbols that the
+        # runtime already loaded by Julia may lack (clock_gettime64, nanosleep64):
+        # embed them. JLIBKRIGING_WINLINK selects how (experiment knob):
+        #   static  (default)  -static
+        #   whole              only winpthread, fully embedded
+        #   gcc                -static-libgcc -static-libstdc++ only (previous behaviour)
+        mode = get(ENV, "JLIBKRIGING_WINLINK", "static")
+        flags = mode == "gcc"   ? "-static-libgcc -static-libstdc++" :
+                mode == "whole" ? "-static-libgcc -static-libstdc++ -Wl,--push-state,-Bstatic,--whole-archive -lwinpthread -Wl,--pop-state" :
+                                  "-static"
+        log("Windows link mode: $mode ($flags)")
+        push!(args, "-DCMAKE_SHARED_LINKER_FLAGS=$flags", "-DCMAKE_EXE_LINKER_FLAGS=$flags")
         # Julia's process already holds its own MinGW runtime (libwinpthread,
         # libgcc_s, ...): a libgomp from a newer compiler cannot bind to those
         # ("The specified procedure could not be found"). Use OpenMP only if
