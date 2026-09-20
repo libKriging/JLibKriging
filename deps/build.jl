@@ -217,19 +217,23 @@ function build_library(work)
 end
 
 """
-Windows/MinGW: the libraries depend on runtime DLLs of the compiler that built
-them (libgomp, libwinpthread, ...), which are not on Julia's search path. Read
-the imports with objdump and copy those found in the compiler's bin directory
-next to libkriging_c.dll (DLLs already provided elsewhere, such as OpenBLAS32_jll's
-libopenblas, or by Windows itself are not in that directory and are left alone).
+Windows/MinGW: the libraries import DLLs that are not on Julia's search path
+(the compiler's runtime -- libgomp, libwinpthread, ... -- and OpenBLAS32_jll's
+libopenblas). Read the imports with objdump and copy the ones found in the
+compiler's bin directory or in OpenBLAS32_jll's, next to libkriging_c.dll (the
+directory of a DLL is searched first when it is loaded). Whatever remains
+unresolved (neither bundled, nor in Julia's bin directory, nor a Windows
+system DLL) is reported, to make a failure to load diagnosable.
 """
 function bundle_mingw_runtime(libdir)
     cache = read(joinpath(BUILD, "CMakeCache.txt"), String)
     m = match(r"^CMAKE_CXX_COMPILER:[A-Z]+=(.+)$"m, cache)
     m === nothing && (log("compiler not found in CMakeCache: runtime DLLs not bundled"); return)
-    bindir = dirname(strip(m.captures[1]))
-    objdump = joinpath(bindir, "objdump.exe")
-    isfile(objdump) || (log("objdump not found next to the compiler ($bindir): runtime DLLs not bundled"); return)
+    gccbin = dirname(strip(m.captures[1]))
+    objdump = joinpath(gccbin, "objdump.exe")
+    isfile(objdump) || (log("objdump not found next to the compiler ($gccbin): runtime DLLs not bundled"); return)
+    sources = [gccbin, dirname(OpenBLAS32_jll.libopenblas_path)]
+    sysdirs = [Sys.BINDIR, joinpath(get(ENV, "SystemRoot", "C:\\Windows"), "System32")]
     done = Set{String}()
     queue = filter(f -> endswith(lowercase(f), ".dll"), readdir(libdir))
     while !isempty(queue)
@@ -239,11 +243,14 @@ function bundle_mingw_runtime(libdir)
         out = read(`$objdump -p $(joinpath(libdir, dll))`, String)
         for mm in eachmatch(r"DLL Name:\s*(\S+)"i, out)
             dep = mm.captures[1]
-            src = joinpath(bindir, dep)
-            if isfile(src) && !isfile(joinpath(libdir, dep))
-                log("bundling MinGW runtime $dep (needed by $dll)")
-                cp(src, joinpath(libdir, dep))
+            isfile(joinpath(libdir, dep)) && continue
+            idx = findfirst(d -> isfile(joinpath(d, dep)), sources)
+            if idx !== nothing
+                log("bundling $dep (needed by $dll) from $(sources[idx])")
+                cp(joinpath(sources[idx], dep), joinpath(libdir, dep))
                 push!(queue, dep)
+            elseif !any(d -> isfile(joinpath(d, dep)), sysdirs) && !startswith(lowercase(dep), "api-ms-win-")
+                log("WARNING: $dep (needed by $dll) was not found anywhere")
             end
         end
     end
