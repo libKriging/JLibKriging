@@ -36,6 +36,13 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Build (deps/build.jl)
         uses: julia-actions/julia-buildpkg@v1
+      - name: Diagnose (Windows only, step by step)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: bash
+        env:
+          OMP_NUM_THREADS: '1'
+        run: julia --project=. tools/diagnose.jl
       - name: Test
         uses: julia-actions/julia-runtest@v1
         env:
