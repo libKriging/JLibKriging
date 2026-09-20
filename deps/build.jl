@@ -291,7 +291,11 @@ function generate_module(work, lib)
         s, nj = _sub(s, r"^using Libdl[^\n]*\n"m => "using Libdl\nusing OpenBLAS32_jll  # provides BLAS/LAPACK to libkriging_c\n")
         nj == 1 || error("no `using Libdl` line in jlibkriging.jl: update deps/build.jl")
     end
-    libpath = replace(lib, "\\" => "/")
+    # Windows only applies the "altered search path" (the DLL's own directory
+    # is searched first for its dependencies) to a path written with
+    # backslashes: with forward slashes libkriging_c.dll cannot find the DLLs
+    # bundled next to it ("The specified module could not be found").
+    libpath = Sys.iswindows() ? replace(lib, "/" => "\\") : lib
     s = replace(s, pat => "get(ENV, \"JLIBKRIGING_LIB_PATH\", raw\"$libpath\")")
     mkpath(GENERATED)
     out = joinpath(GENERATED, "JLibKriging.jl")
