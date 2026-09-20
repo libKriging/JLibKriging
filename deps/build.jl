@@ -16,11 +16,16 @@
 #                           dependencies/ populated) instead of downloading
 #   JLIBKRIGING_BUILD_JOBS  parallel build jobs (default: CPU threads)
 #   JLIBKRIGING_CMAKE_ARGS  extra cmake configure arguments (space separated)
+#   JLIBKRIGING_SYSTEM_BLAS set to 1 to link the system BLAS/LAPACK instead of
+#                           OpenBLAS32_jll (the default on Linux and Windows;
+#                           macOS always uses Accelerate)
+#   CMAKE_GENERATOR         cmake generator (Windows default: "MinGW Makefiles")
 
 using Downloads
 using Libdl
 using Pkg
 using CMake_jll
+using OpenBLAS32_jll
 import Pkg.TOML
 
 const DEPS = @__DIR__
@@ -115,6 +120,8 @@ end
 
 # ---------------------------------------------------------------- 3. build --
 
+use_jll_blas() = !Sys.isapple() && get(ENV, "JLIBKRIGING_SYSTEM_BLAS", "") in ("", "0")
+
 function libname()
     Sys.iswindows() ? "libkriging_c.dll" : Sys.isapple() ? "libkriging_c.dylib" : "libkriging_c.so"
 end
@@ -136,6 +143,23 @@ function build_library(work)
         "-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON",
         "-DCMAKE_INSTALL_RPATH=" * (Sys.isapple() ? "@loader_path" : "\$ORIGIN"),
     ]
+    if use_jll_blas()
+        # libKriging needs BLAS + LAPACK with 32-bit integers and standard
+        # symbol names: OpenBLAS32_jll provides both, so no system library nor
+        # compiler-specific setup is required (a runner without liblapack-dev
+        # would otherwise yield an armadillo built WITHOUT LAPACK).
+        push!(args, "-DOPENBLAS_PROVIDES_LAPACK=ON",
+                    "-Dopenblas_LIBRARY=" * replace(OpenBLAS32_jll.libopenblas_path, "\\" => "/"))
+    end
+    if Sys.iswindows()
+        # CMake_jll's cmake defaults to NMake; the OpenBLAS32_jll DLL is built
+        # with MinGW-w64, like Julia itself and like rlibkriging on Windows.
+        if isempty(get(ENV, "CMAKE_GENERATOR", ""))
+            push!(args, "-G", "MinGW Makefiles")
+        end
+        push!(args, "-DCMAKE_SHARED_LINKER_FLAGS=-static-libgcc -static-libstdc++",
+                    "-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
+    end
     extra = split(get(ENV, "JLIBKRIGING_CMAKE_ARGS", ""))
     append!(args, extra)
     cmake = CMake_jll.cmake()
@@ -195,6 +219,12 @@ function generate_module(work, lib)
     n = length(collect(eachmatch(pat, s)))
     n == 1 || error("could not point the wrapper at the built library (expected 1 match, got $n): " *
                     "libKriging's jlibkriging.jl changed, update deps/build.jl")
+    if use_jll_blas()
+        # libkriging_c is linked against OpenBLAS32_jll's library: loading the JLL
+        # first makes the dynamic loader resolve that dependency by name.
+        s, nj = _sub(s, r"^using Libdl[^\n]*\n"m => "using Libdl\nusing OpenBLAS32_jll  # provides BLAS/LAPACK to libkriging_c\n")
+        nj == 1 || error("no `using Libdl` line in jlibkriging.jl: update deps/build.jl")
+    end
     libpath = replace(lib, "\\" => "/")
     s = replace(s, pat => "get(ENV, \"JLIBKRIGING_LIB_PATH\", raw\"$libpath\")")
     mkpath(GENERATED)
