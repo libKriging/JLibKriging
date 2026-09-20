@@ -1,0 +1,9 @@
+/deps/src/
+/deps/build/
+/deps/usr/
+/deps/generated/
+/deps/deps.jl
+/Manifest.toml
+*.json
+!Project.toml
+/deps/build.log

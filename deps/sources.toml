@@ -1,0 +1,24 @@
+# Pinned sources built by deps/build.jl. A registered Julia package is shipped
+# as a plain archive WITHOUT git submodules, so (like rlibkriging's
+# tools/gitmodules-shas) the exact commits are recorded here and fetched as
+# GitHub archives at build time. Kept in sync by tools/update_sources.sh.
+[libKriging]
+repo = "libKriging/libKriging"
+sha  = "d41c813417620dcde9caefbf78e33df0e4733c59"   # v1.2.1
+version = "1.2.1"
+
+# libKriging's own submodules that the Julia binding needs
+[[dependency]]
+path = "dependencies/armadillo-code"
+repo = "libKriging/armadillo-code"
+sha  = "906658336ec2c94f5440a2865d596e7c35fd9984"
+
+[[dependency]]
+path = "dependencies/lbfgsb_cpp"
+repo = "libKriging/lbfgsb_cpp"
+sha  = "71213ed6174c4048ba9db8285ad9f682bb7ac041"
+
+# used by armadillo's build only when no system LAPACK is found
+[slapack]
+repo = "libKriging/slapack"
+sha  = "72a7f3753e02b0471e93296f2b22877c6fee7328"
