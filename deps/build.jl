@@ -184,6 +184,15 @@ function build_library(work)
         end
         push!(args, "-DCMAKE_SHARED_LINKER_FLAGS=-static-libgcc -static-libstdc++",
                     "-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
+        # Julia's process already holds its own MinGW runtime (libwinpthread,
+        # libgcc_s, ...): a libgomp from a newer compiler cannot bind to those
+        # ("The specified procedure could not be found"). Use OpenMP only if
+        # Julia ships libgomp itself, i.e. a consistent runtime; else run
+        # libKriging's multistart optimisation sequentially.
+        if !isfile(joinpath(Sys.BINDIR, "libgomp-1.dll"))
+            log("no libgomp-1.dll in Julia's bin directory: building without OpenMP")
+            push!(args, "-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON")
+        end
     end
     extra = split(get(ENV, "JLIBKRIGING_CMAKE_ARGS", ""))
     append!(args, extra)
@@ -244,6 +253,13 @@ function bundle_mingw_runtime(libdir)
         for mm in eachmatch(r"DLL Name:\s*(\S+)"i, out)
             dep = mm.captures[1]
             isfile(joinpath(libdir, dep)) && continue
+            # already provided by Julia itself (its MinGW runtime): a same-named DLL
+            # is resolved to the one loaded in the process anyway, and mixing
+            # versions is what breaks the load -- use Julia's
+            if isfile(joinpath(Sys.BINDIR, dep))
+                log("$dep (needed by $dll) is provided by Julia")
+                continue
+            end
             idx = findfirst(d -> isfile(joinpath(d, dep)), sources)
             if idx !== nothing
                 log("bundling $dep (needed by $dll) from $(sources[idx])")
