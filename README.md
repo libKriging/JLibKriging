@@ -50,6 +50,15 @@ libKriging checkout instead of downloading), `JLIBKRIGING_BUILD_JOBS`,
 `JLIBKRIGING_CMAKE_ARGS`. `JLIBKRIGING_LIB_PATH` at run time overrides the library
 location.
 
+## Troubleshooting
+
+`tools/diagnose.jl` loads the library and exercises it step by step (load, dlopen,
+construct, fit, predict) with flushed output; `tools/diagnose_imports.jl` (Windows)
+lists the DLL imports that no DLL exports (the cause of \"The specified procedure
+could not be found\"). On Windows the build needs MinGW-w64 (`gcc`, `mingw32-make`)
+in the `PATH`, and links its C++ runtime statically because the runtime Julia has
+already loaded takes precedence over any same-named DLL.
+
 ## Versions and registration
 
 The package version is libKriging's version (`cmake/version.cmake`). Every push to

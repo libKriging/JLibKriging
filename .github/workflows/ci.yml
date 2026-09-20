@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.julia }} - ${{ matrix.os }}${{ matrix.variant != 'default' && format(' ({0})', matrix.variant) || '' }}
+    name: Julia ${{ matrix.julia }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45   # a hang must fail fast, not burn the 6h default
     strategy:
@@ -25,13 +25,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         julia: ['1']
-        variant: ['default']
         include:
           - os: ubuntu-latest
             julia: 'lts'
-          - os: windows-latest
-            julia: '1'
-            variant: whole
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -40,26 +36,8 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Build (deps/build.jl)
         uses: julia-actions/julia-buildpkg@v1
-        env:
-          JLIBKRIGING_WINLINK: ${{ matrix.variant != 'default' && matrix.variant || '' }}
-      - name: Diagnose imports (Windows only)
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        run: julia --project=. tools/diagnose_imports.jl
-      - name: Diagnose (Windows only, step by step)
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        env:
-          OMP_NUM_THREADS: '1'
-        run: julia --project=. tools/diagnose.jl
       - name: Test
         uses: julia-actions/julia-runtest@v1
-        env:
-          # libKriging's own Windows CI needs single-threaded OpenMP to avoid a
-          # deadlock (OpenMP + OpenBLAS threads); same precaution here.
-          OMP_NUM_THREADS: ${{ runner.os == 'Windows' && '1' || '' }}
 
   register:
     name: Register on the General registry
