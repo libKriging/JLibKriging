@@ -9,6 +9,13 @@ libdir = normpath(joinpath(@__DIR__, "..", "deps", "usr", "lib"))
 dirs = [libdir, dirname(OpenBLAS32_jll.libopenblas_path), Sys.BINDIR,
         joinpath(get(ENV, "SystemRoot", "C:\\Windows"), "System32"), dirname(objdump)]
 println("objdump = $objdump\nlibdir  = $libdir\nlibopenblas = $(OpenBLAS32_jll.libopenblas_path)")
+# raw excerpt of libkriging_c.dll's import table, to validate the parsing below
+let raw = readlines(`$objdump -p $(joinpath(libdir, "libkriging_c.dll"))`)
+    i = findfirst(l -> occursin("DLL Name:", l), raw)
+    println("--- raw objdump excerpt (libkriging_c.dll)")
+    i === nothing || foreach(l -> println("    ", l), raw[max(1, i - 3):min(end, i + 8)])
+    println("---")
+end
 
 function imports(dll)
     out = Dict{String,Vector{String}}()
@@ -19,7 +26,8 @@ function imports(dll)
             cur = m.captures[1]; out[cur] = String[]; continue
         end
         if cur !== nothing
-            mm = match(r"^\s+[0-9a-f]+\s+\d+\s+(\S+)\s*$"i, line)
+            # member lines: "<vma> <hint> <name>" (hint printed in hex)
+            mm = match(r"^\s+[0-9a-f]+\s+[0-9a-f]+\s+([A-Za-z_@?\$][^\s]*)"i, line)
             mm !== nothing && push!(out[cur], mm.captures[1])
         end
     end
@@ -48,6 +56,7 @@ nbad = 0
 for dll in filter(f -> endswith(lowercase(f), ".dll"), readdir(libdir))
     println("== $dll")
     for (dep, syms) in imports(joinpath(libdir, dll))
+        startswith(lowercase(dep), "api-ms-win-") && continue   # virtual API sets
         p = findprovider(dep)
         if p === nothing
             println("   $dep: PROVIDER NOT FOUND ($(length(syms)) symbols)"); global nbad += 1; continue
