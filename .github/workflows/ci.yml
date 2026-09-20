@@ -64,9 +64,13 @@ jobs:
           if [ "$CODE" = "200" ] && grep -q "^\[\"${VERSION}\"\]" versions.toml; then
             echo "already registered"; echo "register=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          # avoid re-triggering Registrator while its pull request is still open
+          # avoid re-triggering Registrator while its pull request is still open. The
+          # search is case-insensitive, so filter on the exact title (case-sensitive):
+          # an old "jlibkriging" pull request must not block "JLibKriging".
           PENDING=$(gh pr list --repo JuliaRegistries/General --state open \
-                      --search "\"${NAME} v${VERSION}\" in:title" --json number --jq 'length')
+                      --search "\"${NAME} v${VERSION}\" in:title" --json title |
+                    jq --arg n "${NAME}" --arg v "${VERSION}" \
+                       '[.[] | select(.title == "New package: \($n) v\($v)" or .title == "New version: \($n) v\($v)")] | length')
           if [ "${PENDING}" != "0" ]; then
             echo "a registration pull request is already open"; echo "register=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
