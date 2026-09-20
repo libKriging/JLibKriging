@@ -211,8 +211,42 @@ function build_library(work)
             end
         end
     end
+    Sys.iswindows() && bundle_mingw_runtime(joinpath(USR, "lib"))
     rm(BUILD; recursive=true, force=true)
     return lib
+end
+
+"""
+Windows/MinGW: the libraries depend on runtime DLLs of the compiler that built
+them (libgomp, libwinpthread, ...), which are not on Julia's search path. Read
+the imports with objdump and copy those found in the compiler's bin directory
+next to libkriging_c.dll (DLLs already provided elsewhere, such as OpenBLAS32_jll's
+libopenblas, or by Windows itself are not in that directory and are left alone).
+"""
+function bundle_mingw_runtime(libdir)
+    cache = read(joinpath(BUILD, "CMakeCache.txt"), String)
+    m = match(r"^CMAKE_CXX_COMPILER:[A-Z]+=(.+)$"m, cache)
+    m === nothing && (log("compiler not found in CMakeCache: runtime DLLs not bundled"); return)
+    bindir = dirname(strip(m.captures[1]))
+    objdump = joinpath(bindir, "objdump.exe")
+    isfile(objdump) || (log("objdump not found next to the compiler ($bindir): runtime DLLs not bundled"); return)
+    done = Set{String}()
+    queue = filter(f -> endswith(lowercase(f), ".dll"), readdir(libdir))
+    while !isempty(queue)
+        dll = popfirst!(queue)
+        lowercase(dll) in done && continue
+        push!(done, lowercase(dll))
+        out = read(`$objdump -p $(joinpath(libdir, dll))`, String)
+        for mm in eachmatch(r"DLL Name:\s*(\S+)"i, out)
+            dep = mm.captures[1]
+            src = joinpath(bindir, dep)
+            if isfile(src) && !isfile(joinpath(libdir, dep))
+                log("bundling MinGW runtime $dep (needed by $dll)")
+                cp(src, joinpath(libdir, dep))
+                push!(queue, dep)
+            end
+        end
+    end
 end
 
 # -------------------------------------------------------------- 4. wrapper --
