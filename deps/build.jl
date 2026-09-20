@@ -99,6 +99,31 @@ function patch_file(path, subs::Pair...)
     write(path, s)
 end
 
+"""
+MinGW-w64 (GCC) rejects `dllimport` on a function that is *defined* inline, which
+libKriging's headers do for a few members (`LIBKRIGING_EXPORT void f(..) { .. }`);
+MSVC only warns. Inline code needs no export anyway: drop the macro from those
+one-line definitions (declarations, ending with `;`, keep it).
+"""
+function patch_inline_exports(work)
+    Sys.iswindows() || return
+    pat = r"^([ \t]*)LIBKRIGING_EXPORT[ \t]+(?=[^\n]*\)[ \t]*(const[ \t]*)?(noexcept[ \t]*)?\{[^\n]*\}[ \t]*(//[^\n]*)?$)"m
+    n = 0
+    for (root, _, files) in walkdir(joinpath(work, "src", "lib", "include"))
+        for f in files
+            endswith(f, ".hpp") || continue
+            path = joinpath(root, f)
+            s = read(path, String)
+            r = replace(s, pat => s"\1")
+            if r != s
+                n += length(collect(eachmatch(pat, s)))
+                write(path, r)
+            end
+        end
+    end
+    log("removed LIBKRIGING_EXPORT from $n inline definition(s) (MinGW)")
+end
+
 function patch_cmake(work)
     top = joinpath(work, "CMakeLists.txt")
     # Only the C API library is needed: no unit tests, benchmarks, Catch2,
@@ -237,6 +262,7 @@ function main()
     sources = TOML.parsefile(joinpath(DEPS, "sources.toml"))
     work = fetch_sources(sources)
     patch_cmake(work)
+    patch_inline_exports(work)
     lib = build_library(work)
     generate_module(work, lib)
     write(joinpath(DEPS, "deps.jl"),
