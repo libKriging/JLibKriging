@@ -15,6 +15,7 @@ const TESTS = joinpath(libkriging_source_dir, "bindings", "Julia", "jlibkriging"
                 code = replace(read(joinpath(TESTS, f), String), r"\bjlibkriging\b" => "JLibKriging")
                 path = joinpath(tmp, f)
                 write(path, code)
+                println(stderr, "==> $f"); flush(stderr)   # locate a hang in the CI log
                 @testset "$f" begin
                     include(path)
                 end
