@@ -1,0 +1,62 @@
+# Windows diagnostic: for every DLL in deps/usr/lib, list the imported symbols
+# that the providing DLL does not export -- the cause of "The specified
+# procedure could not be found" (Windows binds all imports at load time).
+#   julia --project=. tools/diagnose_imports.jl
+using OpenBLAS32_jll
+
+objdump = something(Sys.which("objdump"), "C:/mingw64/bin/objdump.exe")
+libdir = normpath(joinpath(@__DIR__, "..", "deps", "usr", "lib"))
+dirs = [libdir, dirname(OpenBLAS32_jll.libopenblas_path), Sys.BINDIR,
+        joinpath(get(ENV, "SystemRoot", "C:\\Windows"), "System32"), dirname(objdump)]
+println("objdump = $objdump\nlibdir  = $libdir\nlibopenblas = $(OpenBLAS32_jll.libopenblas_path)")
+
+function imports(dll)
+    out = Dict{String,Vector{String}}()
+    cur = nothing
+    for line in eachline(`$objdump -p $dll`)
+        m = match(r"DLL Name:\s*(\S+)"i, line)
+        if m !== nothing
+            cur = m.captures[1]; out[cur] = String[]; continue
+        end
+        if cur !== nothing
+            mm = match(r"^\s+[0-9a-f]+\s+\d+\s+(\S+)\s*$"i, line)
+            mm !== nothing && push!(out[cur], mm.captures[1])
+        end
+    end
+    return out
+end
+
+function exports(dll)
+    names = Set{String}()
+    inexp = false
+    for line in eachline(`$objdump -p $dll`)
+        if occursin("[Ordinal/Name Pointer] Table", line)
+            inexp = true; continue
+        end
+        if inexp
+            m = match(r"^\s*\[\s*\d+\]\s+(\S+)\s*$", line)
+            m === nothing ? (isempty(strip(line)) && (inexp = false)) : push!(names, m.captures[1])
+        end
+    end
+    return names
+end
+
+findprovider(name) = (i = findfirst(d -> isfile(joinpath(d, name)), dirs); i === nothing ? nothing : joinpath(dirs[i], name))
+
+cache = Dict{String,Set{String}}()
+nbad = 0
+for dll in filter(f -> endswith(lowercase(f), ".dll"), readdir(libdir))
+    println("== $dll")
+    for (dep, syms) in imports(joinpath(libdir, dll))
+        p = findprovider(dep)
+        if p === nothing
+            println("   $dep: PROVIDER NOT FOUND ($(length(syms)) symbols)"); global nbad += 1; continue
+        end
+        ex = get!(() -> exports(p), cache, p)
+        missing_syms = filter(!in(ex), syms)
+        status = isempty(missing_syms) ? "ok" : "MISSING $(length(missing_syms)) of $(length(syms)): " * join(first(missing_syms, 12), " ")
+        println("   $dep ($(dirname(p))): $status")
+        isempty(missing_syms) || (global nbad += 1)
+    end
+end
+println(nbad == 0 ? "no unresolved import found" : "$nbad import problem(s)")

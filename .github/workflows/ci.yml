@@ -36,6 +36,11 @@ jobs:
       - uses: julia-actions/cache@v2
       - name: Build (deps/build.jl)
         uses: julia-actions/julia-buildpkg@v1
+      - name: Diagnose imports (Windows only)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: bash
+        run: julia --project=. tools/diagnose_imports.jl
       - name: Diagnose (Windows only, step by step)
         if: runner.os == 'Windows'
         timeout-minutes: 5
