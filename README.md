@@ -1,9 +1,11 @@
-# JLibKriging
+# JLibKriging.jl
 
 Julia package for [libKriging](https://github.com/libKriging/libKriging), a fast,
 portable Kriging / Gaussian process library written in C++ (Kriging, NuggetKriging,
 NoiseKriging, WarpKriging, MLPKriging, NestedKriging, Vecchia and Nystrom
 approximations, ...).
+
+The repository is `JLibKriging.jl` (the General registry's naming convention); the package and its module are named `JLibKriging`.
 
 This repository plays the same role for Julia as
 [rlibkriging](https://github.com/libKriging/rlibkriging) does for R: it does not
@@ -15,7 +17,7 @@ adapts them for Julia on the fly, compiles the C API and generates the module.
 
 ```julia
 import Pkg
-Pkg.add("JLibKriging")     # or: Pkg.add(url="https://github.com/libKriging/JLibKriging")
+Pkg.add("JLibKriging")     # or: Pkg.add(url="https://github.com/libKriging/JLibKriging.jl")
 ```
 
 Installation compiles libKriging (`deps/build.jl`, a few minutes) and requires a
