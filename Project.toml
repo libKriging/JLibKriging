@@ -1,6 +1,6 @@
 name = "JLibKriging"
 uuid = "e8f3b728-4a2f-4b5c-9c3a-7d8b5e6f1a2d"
-version = "1.2.1"
+version = "1.2.2"
 
 [deps]
 CMake_jll = "3f4e10e2-61f2-5801-8945-23b9d642d0e6"
